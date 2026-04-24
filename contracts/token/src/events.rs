@@ -12,8 +12,8 @@ pub fn burned(env: &Env, from: &Address, amount: i128) {
     env.events().publish((Symbol::new(env, "burn"), from.clone()), amount);
 }
 
-pub fn admin_set(env: &Env, new_admin: &Address) {
-    env.events().publish((Symbol::new(env, "set_admin"),), new_admin.clone());
+pub fn admin_changed(env: &Env, old_admin: &Address, new_admin: &Address) {
+    env.events().publish((Symbol::new(env, "admin_changed"), old_admin.clone()), new_admin.clone());
 }
 
 pub fn approved(env: &Env, from: &Address, spender: &Address, amount: i128) {
