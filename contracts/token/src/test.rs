@@ -197,6 +197,40 @@ fn test_mint_zero_amount() {
 }
 
 #[test]
+fn test_set_admin() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let admin = Address::generate(&env);
+    let new_admin = Address::generate(&env);
+    let (client, contract_address) = create_token_contract(&env);
+    client.initialize(
+        &admin,
+        &String::from_str(&env, "Test Token"),
+        &String::from_str(&env, "TEST"),
+        &18u32,
+        &None,
+    );
+
+    client.set_admin(&new_admin);
+
+    // Admin must be updated in storage
+    assert_eq!(client.admin(), new_admin);
+
+    // Verify admin_changed event was emitted with old_admin as topic and new_admin as data
+    use soroban_sdk::{testutils::Events as _, IntoVal, Symbol};
+    let all_events = env.events().all();
+    let last = all_events.last().unwrap();
+    assert_eq!(
+        last,
+        (
+            contract_address.clone(),
+            (Symbol::new(&env, "admin_changed"), admin.clone()).into_val(&env),
+            new_admin.clone().into_val(&env),
+        )
+    );
+}
+
+#[test]
 #[should_panic]
 fn test_unauthorized_set_admin_fails() {
     let env = Env::default();

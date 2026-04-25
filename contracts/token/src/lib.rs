@@ -131,11 +131,11 @@ impl TokenContract {
 
     /// Transfer admin role to `new_admin`. Current admin only.
     pub fn set_admin(env: Env, new_admin: Address) -> Result<(), TokenError> {
-        let admin = require_admin(&env)?;
-        admin.require_auth();
+        let old_admin = require_admin(&env)?;
+        old_admin.require_auth();
         env.storage().instance().set(&DataKey::Admin, &new_admin);
         bump_instance(&env);
-        events::admin_set(&env, &new_admin);
+        events::admin_changed(&env, &old_admin, &new_admin);
         Ok(())
     }
 
