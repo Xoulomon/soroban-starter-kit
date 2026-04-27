@@ -303,7 +303,8 @@ fn test_deadline_passed() {
     let arbiter = Address::generate(&env);
     let token_contract = create_mock_token(&env);
     let amount = 1_000i128;
-    let deadline = env.ledger().sequence() + 5;
+    // MIN_DEADLINE_BUFFER is 10, so deadline must be at least sequence + 10
+    let deadline = env.ledger().sequence() + 10;
 
     let (client, _) = create_escrow_contract(&env);
     client.initialize(&buyer, &seller, &arbiter, &token_contract, &amount, &deadline);
@@ -328,15 +329,17 @@ fn test_arbiter_resolve_to_seller() {
 
     // Verify funds_released event is present
     let all_events = env.events().all();
-    let last = all_events.last().unwrap();
-    assert_eq!(
-        last,
+    let n = all_events.len();
+    assert!(n > 0);
+    let expected = soroban_sdk::vec![
+        &env,
         (
             contract_address.clone(),
             (Symbol::new(&env, "funds_released"), seller.clone()).into_val(&env),
             amount.into_val(&env),
-        )
-    );
+        ),
+    ];
+    assert_eq!(all_events.slice(n - 1..), expected);
 }
 
 #[test]
@@ -352,15 +355,17 @@ fn test_arbiter_resolve_to_buyer() {
 
     // Verify funds_refunded event is present
     let all_events = env.events().all();
-    let last = all_events.last().unwrap();
-    assert_eq!(
-        last,
+    let n = all_events.len();
+    assert!(n > 0);
+    let expected = soroban_sdk::vec![
+        &env,
         (
             contract_address.clone(),
             (Symbol::new(&env, "funds_refunded"), buyer.clone()).into_val(&env),
             amount.into_val(&env),
-        )
-    );
+        ),
+    ];
+    assert_eq!(all_events.slice(n - 1..), expected);
 }
 
 
