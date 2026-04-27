@@ -154,6 +154,11 @@ impl TokenContract {
             .get(&DataKey::TotalSupply)
             .unwrap_or(0)
     }
+
+    /// Return the git commit hash baked in at compile time.
+    pub fn version(env: Env) -> String {
+        String::from_str(&env, env!("GIT_HASH"))
+    }
 }
 
 #[contractimpl]
