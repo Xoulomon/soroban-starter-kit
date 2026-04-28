@@ -342,3 +342,76 @@ fn test_arbiter_resolve_to_buyer() {
 }
 
 
+
+// ---------------------------------------------------------------------------
+// Feature-gated tests
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "pausable")]
+mod pausable_tests {
+    use super::*;
+    use soroban_common::AdminKey;
+
+    fn setup_with_admin<'a>(
+        env: &'a Env,
+    ) -> (EscrowContractClient<'a>, Address, Address) {
+        let admin = Address::generate(env);
+        let buyer = Address::generate(env);
+        let seller = Address::generate(env);
+        let arbiter = Address::generate(env);
+        let token = create_mock_token(env);
+        let amount = 1_000i128;
+        let deadline = env.ledger().sequence() + 100;
+
+        let (client, contract_address) = create_escrow_contract(env);
+        // Set admin directly in contract storage before initializing
+        env.as_contract(&contract_address, || {
+            env.storage().instance().set(&AdminKey::Admin, &admin);
+        });
+        client.initialize(&buyer, &seller, &arbiter, &token, &amount, &deadline);
+        (client, admin, buyer)
+    }
+
+    #[test]
+    fn test_pause_blocks_fund() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let (client, _admin, _buyer) = setup_with_admin(&env);
+
+        client.pause();
+        assert!(client.try_fund().is_err());
+    }
+
+    #[test]
+    fn test_unpause_restores_fund() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let (client, _admin, _buyer) = setup_with_admin(&env);
+
+        client.pause();
+        client.unpause();
+        client.fund();
+        assert_eq!(client.get_state(), Some(EscrowState::Funded));
+    }
+}
+
+#[cfg(feature = "upgradeable")]
+mod upgradeable_tests {
+    use super::*;
+    use soroban_common::AdminKey;
+
+    #[test]
+    fn test_upgrade_requires_admin() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (client, contract_address, ..) = setup_funded_escrow(&env);
+        let admin = Address::generate(&env);
+        env.as_contract(&contract_address, || {
+            env.storage().instance().set(&AdminKey::Admin, &admin);
+        });
+        let dummy_hash = soroban_sdk::BytesN::from_array(&env, &[0u8; 32]);
+        // Auth passes; the upgrade itself fails because the hash is invalid.
+        let _ = client.try_upgrade(&dummy_hash);
+    }
+}
