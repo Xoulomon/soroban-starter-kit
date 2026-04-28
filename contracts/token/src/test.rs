@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 use super::*;
-use soroban_sdk::{testutils::{Address as _, Ledger as _}, Address, Env, String};
+use soroban_sdk::{testutils::{Address as _, Ledger as _}, Address, Env, FromVal, String};
 
 fn create_token_contract<'a>(env: &Env) -> (TokenContractClient<'a>, Address) {
     let contract_address = env.register_contract(None, TokenContract);
@@ -230,6 +230,15 @@ fn test_set_admin() {
         ),
     ];
     assert_eq!(all_events.slice(n - 1..), expected);
+    let last = all_events.last().unwrap();
+    let (addr, topics, data) = last;
+    assert_eq!(addr, contract_address);
+    assert_eq!(
+        topics,
+        (Symbol::new(&env, "admin_changed"), admin.clone()).into_val(&env)
+    );
+    let emitted_new_admin = Address::from_val(&env, &data);
+    assert_eq!(emitted_new_admin, new_admin);
 }
 
 #[test]
@@ -295,6 +304,14 @@ fn test_approve_revoke() {
         ),
     ];
     assert_eq!(all_events.slice(n - 1..), expected);
+    let last = all_events.last().unwrap();
+    let (addr, topics, data) = last;
+    assert_eq!(addr, contract_address);
+    assert_eq!(
+        topics,
+        (Symbol::new(&env, "revoke"), user.clone(), spender.clone()).into_val(&env)
+    );
+    assert!(data.is_void());
 }
 
 #[test]
@@ -310,4 +327,26 @@ fn test_transfer_self_is_noop() {
 
     // Balance unchanged
     assert_eq!(client.balance(&user), 500i128);
+}
+
+#[test]
+fn test_balance_of_distinguishes_unknown_from_zero() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let admin = Address::generate(&env);
+    let user = Address::generate(&env);
+    let unknown = Address::generate(&env);
+    let client = init_token(&env, &admin);
+
+    // Unknown address has no storage entry
+    assert_eq!(client.balance_of(&unknown), None);
+
+    // After minting and burning to zero, entry exists with value 0
+    client.mint(&user, &100i128);
+    client.burn(&user, &100i128);
+    assert_eq!(client.balance_of(&user), Some(0i128));
+
+    // balance() returns 0 for both — indistinguishable
+    assert_eq!(client.balance(&unknown), 0i128);
+    assert_eq!(client.balance(&user), 0i128);
 }
