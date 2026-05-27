@@ -388,6 +388,17 @@ fn test_fund_insufficient_funds() {
 }
 
 
+#[test]
+#[should_panic(expected = "Error(Contract, #2)")]
+fn test_fund_twice_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, ..) = setup_funded_escrow(&env);
+    // Already Funded; calling fund again must fail with InvalidState (#2)
+    client.fund();
+}
+
 // ---------------------------------------------------------------------------
 // Feature-gated tests
 // ---------------------------------------------------------------------------
