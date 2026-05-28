@@ -197,6 +197,32 @@ fn test_mint_zero_amount() {
 }
 
 #[test]
+#[should_panic(expected = "Error(Contract, #6)")]
+fn test_transfer_zero_amount() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let admin = Address::generate(&env);
+    let user = Address::generate(&env);
+    let other = Address::generate(&env);
+    let client = init_token(&env, &admin);
+    client.mint(&user, &1000i128);
+    client.transfer(&user, &other, &0i128);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #6)")]
+fn test_transfer_negative_amount() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let admin = Address::generate(&env);
+    let user = Address::generate(&env);
+    let other = Address::generate(&env);
+    let client = init_token(&env, &admin);
+    client.mint(&user, &1000i128);
+    client.transfer(&user, &other, &-1i128);
+}
+
+#[test]
 fn test_set_admin() {
     let env = Env::default();
     env.mock_all_auths();
