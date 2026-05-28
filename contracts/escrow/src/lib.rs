@@ -38,6 +38,10 @@ pub struct EscrowContract;
 #[contractimpl]
 impl EscrowContract {
     /// Initialize a new escrow. Must be called exactly once.
+    ///
+    /// `token_contract` must be a valid Soroban token contract that implements the
+    /// token interface (i.e. responds to `decimals()`). Passing an address that does
+    /// not implement the token interface will cause this call to panic.
     pub fn initialize(
         env: Env,
         buyer: Address,
@@ -60,8 +64,10 @@ impl EscrowContract {
             return Err(EscrowError::DeadlinePassed);
         }
 
+        // Validate that token_contract is a real token by calling decimals().
+        // This panics if the address does not implement the token interface.
         let token_client = token::Client::new(&env, &token_contract);
-        let _ = token_client.decimals();
+        token_client.decimals();
 
         env.storage().instance().set(&Buyer, &buyer);
         env.storage().instance().set(&Seller, &seller);
@@ -75,14 +81,8 @@ impl EscrowContract {
 
         bump_instance(&env);
 
-        env.events().publish(
-            (Symbol::new(&env, "escrow_created"), buyer.clone(), seller.clone()),
-            amount,
-        );
-        env.events().publish(
-            (Symbol::new(&env, "initialized"), buyer.clone(), seller.clone(), arbiter.clone()),
-            amount,
-        );
+        events::escrow_created(&env, &buyer, &seller, amount);
+        events::initialized(&env, &buyer, &seller, &arbiter, amount);
 
         Ok(())
     }
@@ -112,6 +112,9 @@ impl EscrowContract {
         let amount: i128 = env.storage().instance().get(&Amount).unwrap();
 
         let token_client = token::Client::new(&env, &token_contract);
+        if token_client.balance(&buyer) < amount {
+            return Err(EscrowError::InsufficientFunds);
+        }
         token_client.transfer(&buyer, &env.current_contract_address(), &amount);
 
         env.storage().instance().set(&State, &EscrowState::Funded);
@@ -323,12 +326,26 @@ impl EscrowContract {
 #[cfg(feature = "pausable")]
 #[contractimpl]
 impl EscrowContract {
+    /// Minimum ledgers between proposing and executing a WASM upgrade (~24 h at 5 s/ledger).
+    const UPGRADE_DELAY_LEDGERS: u32 = 17_280;
+
     /// Pause the contract. Admin only.
     pub fn pause(env: Env) -> Result<(), EscrowError> {
         let admin = require_admin(&env)?;
         admin.require_auth();
         env.storage().instance().set(&Paused, &true);
         bump_instance(&env);
+        events::paused(&env, &admin);
+        Ok(())
+    }
+
+    /// Unpause the contract. Admin only.
+    pub fn unpause(env: Env) -> Result<(), EscrowError> {
+        let admin = require_admin(&env)?;
+        admin.require_auth();
+        env.storage().instance().set(&Paused, &false);
+        bump_instance(&env);
+        events::unpaused(&env, &admin);
         Ok(())
     }
 
@@ -337,11 +354,47 @@ impl EscrowContract {
         soroban_sdk::String::from_str(&env, env!("GIT_HASH"))
     }
 
-    /// Upgrade the contract to a new WASM hash. Admin only.
-    pub fn upgrade(env: Env, new_wasm_hash: soroban_sdk::BytesN<32>) -> Result<(), EscrowError> {
+    /// Propose a WASM upgrade. Admin only.
+    ///
+    /// Stores `wasm_hash` and a `ready_after` ledger number. The upgrade cannot
+    /// be executed until at least `UPGRADE_DELAY_LEDGERS` ledgers have passed.
+    pub fn propose_upgrade(env: Env, wasm_hash: soroban_sdk::BytesN<32>) -> Result<(), EscrowError> {
         let admin = require_admin(&env)?;
         admin.require_auth();
+        let ready_after = env.ledger().sequence() + Self::UPGRADE_DELAY_LEDGERS;
+        env.storage()
+            .instance()
+            .set(&DataKey::PendingUpgrade, &(wasm_hash.clone(), ready_after));
+        bump_instance(&env);
+        env.events().publish(
+            (soroban_sdk::Symbol::new(&env, "upgrade_proposed"), admin),
+            (wasm_hash, ready_after),
+        );
+        Ok(())
+    }
+
+    /// Execute a previously proposed WASM upgrade. Admin only.
+    ///
+    /// Fails if no upgrade has been proposed or if the timelock has not yet elapsed.
+    pub fn execute_upgrade(env: Env) -> Result<(), EscrowError> {
+        let admin = require_admin(&env)?;
+        admin.require_auth();
+        events::upgraded(&env, &admin, &new_wasm_hash);
         env.deployer().update_current_contract_wasm(new_wasm_hash);
+        let (wasm_hash, ready_after): (soroban_sdk::BytesN<32>, u32) = env
+            .storage()
+            .instance()
+            .get(&DataKey::PendingUpgrade)
+            .ok_or(EscrowError::NotAuthorized)?;
+        if env.ledger().sequence() < ready_after {
+            return Err(EscrowError::NotAuthorized);
+        }
+        env.storage().instance().remove(&DataKey::PendingUpgrade);
+        env.events().publish(
+            (soroban_sdk::Symbol::new(&env, "upgrade_executed"), admin),
+            wasm_hash.clone(),
+        );
+        env.deployer().update_current_contract_wasm(wasm_hash);
         Ok(())
     }
 }
@@ -363,14 +416,13 @@ impl EscrowContract {
         Self::require_state(&env, EscrowState::Delivered)?;
 
         let seller: Address = env.storage().instance().get(&Seller).unwrap();
-        let token_contract: Address = env.storage().instance().get(&TokenContract).unwrap();
         let amount: i128 = env.storage().instance().get(&Amount).unwrap();
 
-        let token_client = token::Client::new(&env, &token_contract);
-        token_client.transfer(&env.current_contract_address(), &seller, &amount);
-
+        // checks-effects-interactions: update state before external call
         env.storage().instance().set(&State, &EscrowState::Completed);
         bump_instance(&env);
+
+        admin::transfer_token(&env, &env.current_contract_address(), &seller, amount);
 
         env.events()
             .publish((Symbol::new(&env, "funds_released"), seller), amount);
@@ -382,14 +434,13 @@ impl EscrowContract {
         Self::require_state(&env, EscrowState::Funded)?;
 
         let buyer: Address = env.storage().instance().get(&Buyer).unwrap();
-        let token_contract: Address = env.storage().instance().get(&TokenContract).unwrap();
         let amount: i128 = env.storage().instance().get(&Amount).unwrap();
 
-        let token_client = token::Client::new(&env, &token_contract);
-        token_client.transfer(&env.current_contract_address(), &buyer, &amount);
-
+        // checks-effects-interactions: update state before external call
         env.storage().instance().set(&State, &EscrowState::Refunded);
         bump_instance(&env);
+
+        admin::transfer_token(&env, &env.current_contract_address(), &buyer, amount);
 
         env.events()
             .publish((Symbol::new(&env, "funds_refunded"), buyer), amount);

@@ -110,7 +110,7 @@ docker compose up stellar-node
 | 4 | `DeadlineNotReached` | The deadline has not yet passed; premature refund or timeout claim attempted |
 | 5 | `AlreadyInitialized` | `initialize` was called on an escrow that is already set up |
 | 6 | `NotInitialized` | An operation was attempted before the escrow was initialized |
-| 7 | `InsufficientFunds` | The escrow account does not hold enough tokens to complete the operation |
+| 7 | `InsufficientFunds` | The buyer's token balance is too low to cover the escrowed amount |
 | 8 | `InvalidAmount` | The specified amount is zero or otherwise invalid |
 | 9 | `InvalidParties` | Buyer, seller, or arbiter addresses are invalid or conflict with each other |
 
@@ -125,6 +125,7 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup, 
 - [Soroban Examples](https://github.com/stellar/soroban-examples)
 - [Freighter Wallet](https://freighter.app/)
 - [Stellar Laboratory](https://laboratory.stellar.org/)
+- [Security Best Practices](docs/security.md)
 
 ## 📄 License
 
