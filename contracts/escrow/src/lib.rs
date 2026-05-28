@@ -205,7 +205,7 @@ impl EscrowContract {
     }
 
     /// Buyer or seller raises a dispute.
-    pub fn raise_dispute(env: Env) -> Result<(), EscrowError> {
+    pub fn raise_dispute(env: Env, caller: Address) -> Result<(), EscrowError> {
         #[cfg(feature = "pausable")]
         Self::require_not_paused(&env)?;
 
@@ -214,7 +214,16 @@ impl EscrowContract {
             .instance()
             .get(&Buyer)
             .ok_or(EscrowError::NotInitialized)?;
-        buyer.require_auth();
+        let seller: Address = env
+            .storage()
+            .instance()
+            .get(&Seller)
+            .ok_or(EscrowError::NotInitialized)?;
+
+        if caller != buyer && caller != seller {
+            return Err(EscrowError::NotAuthorized);
+        }
+        caller.require_auth();
 
         let state: EscrowState = env
             .storage()
@@ -229,7 +238,7 @@ impl EscrowContract {
         bump_instance(&env);
 
         env.events()
-            .publish((Symbol::new(&env, "dispute_raised"), buyer), ());
+            .publish((Symbol::new(&env, "dispute_raised"), caller), ());
 
         Ok(())
     }
