@@ -408,9 +408,9 @@ impl token::TokenInterface for TokenContract {
             spender: spender.clone(),
         });
         let val: Option<AllowanceValue> = env.storage().temporary().get(&key);
-        let allowance = match val {
-            Some(v) if env.ledger().sequence() <= v.expiration_ledger => v.amount,
-            _ => 0,
+        let (allowance, expiration_ledger) = match val {
+            Some(v) if env.ledger().sequence() <= v.expiration_ledger => (v.amount, v.expiration_ledger),
+            _ => (0, 0),
         };
         if allowance < amount {
             panic_with_error!(&env, TokenError::InsufficientAllowance);
@@ -419,7 +419,7 @@ impl token::TokenInterface for TokenContract {
             &key,
             &AllowanceValue {
                 amount: allowance - amount,
-                expiration_ledger: env.ledger().sequence() + LEDGER_BUMP_AMOUNT,
+                expiration_ledger,
             },
         );
         if let Err(e) = Self::transfer_impl(&env, from, to, amount) {
@@ -475,9 +475,9 @@ impl token::TokenInterface for TokenContract {
             spender: spender.clone(),
         });
         let val: Option<AllowanceValue> = env.storage().temporary().get(&key);
-        let allowance = match val {
-            Some(v) if env.ledger().sequence() <= v.expiration_ledger => v.amount,
-            _ => 0,
+        let (allowance, expiration_ledger) = match val {
+            Some(v) if env.ledger().sequence() <= v.expiration_ledger => (v.amount, v.expiration_ledger),
+            _ => (0, 0),
         };
         if allowance < amount {
             panic_with_error!(&env, TokenError::InsufficientAllowance);
@@ -486,7 +486,7 @@ impl token::TokenInterface for TokenContract {
             &key,
             &AllowanceValue {
                 amount: allowance - amount,
-                expiration_ledger: env.ledger().sequence() + LEDGER_BUMP_AMOUNT,
+                expiration_ledger,
             },
         );
         let balance: i128 = env
