@@ -335,8 +335,19 @@ fn test_raise_dispute() {
     let env = Env::default();
     env.mock_all_auths();
 
-    let (client, ..) = setup_funded_escrow(&env);
-    client.raise_dispute();
+    let (client, _, buyer, ..) = setup_funded_escrow(&env);
+    client.raise_dispute(&buyer);
+
+    assert_eq!(client.get_state(), Some(EscrowState::Disputed));
+}
+
+#[test]
+fn test_seller_raises_dispute() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _, _buyer, seller, ..) = setup_funded_escrow(&env);
+    client.raise_dispute(&seller);
 
     assert_eq!(client.get_state(), Some(EscrowState::Disputed));
 }
@@ -346,8 +357,8 @@ fn test_resolve_dispute_to_seller() {
     let env = Env::default();
     env.mock_all_auths();
 
-    let (client, ..) = setup_funded_escrow(&env);
-    client.raise_dispute();
+    let (client, _, buyer, ..) = setup_funded_escrow(&env);
+    client.raise_dispute(&buyer);
     client.resolve_dispute(&true);
 
     assert_eq!(client.get_state(), Some(EscrowState::Completed));
@@ -358,8 +369,8 @@ fn test_resolve_dispute_to_buyer() {
     let env = Env::default();
     env.mock_all_auths();
 
-    let (client, ..) = setup_funded_escrow(&env);
-    client.raise_dispute();
+    let (client, _, buyer, ..) = setup_funded_escrow(&env);
+    client.raise_dispute(&buyer);
     client.resolve_dispute(&false);
 
     assert_eq!(client.get_state(), Some(EscrowState::Refunded));
@@ -393,7 +404,7 @@ fn test_arbiter_resolve_to_seller() {
     env.mock_all_auths();
 
     let (client, contract_address, buyer, seller, _, _, amount) = setup_funded_escrow(&env);
-    client.raise_dispute();
+    client.raise_dispute(&buyer);
     client.resolve_dispute(&true);
 
     assert_eq!(client.get_state(), Some(EscrowState::Completed));
@@ -405,8 +416,8 @@ fn test_arbiter_resolve_to_buyer() {
     let env = Env::default();
     env.mock_all_auths();
 
-    let (client, ..) = setup_funded_escrow(&env);
-    client.raise_dispute();
+    let (client, _, buyer, ..) = setup_funded_escrow(&env);
+    client.raise_dispute(&buyer);
     client.resolve_dispute(&false);
 
     assert_eq!(client.get_state(), Some(EscrowState::Refunded));

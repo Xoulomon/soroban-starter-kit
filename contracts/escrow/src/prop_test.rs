@@ -64,10 +64,10 @@ proptest! {
     fn prop_arbiter_resolve_seller(amount in 1i128..=1_000_000i128) {
         let env = Env::default();
         env.mock_all_auths();
-        let (client, ..) = setup_escrow(&env, amount);
+        let (client, buyer, ..) = setup_escrow(&env, amount);
 
         client.fund();
-        client.raise_dispute();
+        client.raise_dispute(&buyer);
         client.resolve_dispute(&true);
 
         prop_assert_eq!(client.get_state(), Some(EscrowState::Completed));
@@ -78,10 +78,10 @@ proptest! {
     fn prop_arbiter_resolve_buyer(amount in 1i128..=1_000_000i128) {
         let env = Env::default();
         env.mock_all_auths();
-        let (client, ..) = setup_escrow(&env, amount);
+        let (client, buyer, ..) = setup_escrow(&env, amount);
 
         client.fund();
-        client.raise_dispute();
+        client.raise_dispute(&buyer);
         client.resolve_dispute(&false);
 
         prop_assert_eq!(client.get_state(), Some(EscrowState::Refunded));
