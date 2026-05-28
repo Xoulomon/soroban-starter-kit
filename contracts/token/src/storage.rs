@@ -4,6 +4,8 @@ use soroban_sdk::{contracttype, Address};
 #[derive(Clone)]
 pub enum DataKey {
     Admin,
+    /// Instance storage – pending admin address for two-step admin transfer.
+    PendingAdmin,
     /// Persistent storage – token balance (`i128`) for a given [`Address`].
     Balance(Address),
     Allowance(AllowanceDataKey),
