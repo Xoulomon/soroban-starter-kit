@@ -579,6 +579,54 @@ fn test_approve_delivery_without_mark_delivered_fails() {
     client.approve_delivery();
 }
 
+#[test]
+#[should_panic]
+fn test_approve_delivery_by_seller_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _, _buyer, seller, ..) = setup_funded_escrow(&env);
+    client.mark_delivered();
+    
+    // Clear auths and only authorize seller — approve_delivery requires buyer auth
+    use soroban_sdk::testutils::{MockAuth, MockAuthInvoke};
+    let contract_address = env.register_contract(None, EscrowContract);
+    env.mock_auths(&[MockAuth {
+        address: &seller,
+        invoke: &MockAuthInvoke {
+            contract: &contract_address,
+            fn_name: "approve_delivery",
+            args: soroban_sdk::vec![&env].into(),
+            sub_invokes: &[],
+        },
+    }]);
+    client.approve_delivery();
+}
+
+#[test]
+#[should_panic]
+fn test_approve_delivery_by_arbiter_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, _, _buyer, _seller, arbiter, ..) = setup_funded_escrow(&env);
+    client.mark_delivered();
+    
+    // Clear auths and only authorize arbiter — approve_delivery requires buyer auth
+    use soroban_sdk::testutils::{MockAuth, MockAuthInvoke};
+    let contract_address = env.register_contract(None, EscrowContract);
+    env.mock_auths(&[MockAuth {
+        address: &arbiter,
+        invoke: &MockAuthInvoke {
+            contract: &contract_address,
+            fn_name: "approve_delivery",
+            args: soroban_sdk::vec![&env].into(),
+            sub_invokes: &[],
+        },
+    }]);
+    client.approve_delivery();
+}
+
 // ---------------------------------------------------------------------------
 // Feature-gated tests
 // ---------------------------------------------------------------------------
